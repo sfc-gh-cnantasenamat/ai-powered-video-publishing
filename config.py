@@ -4,7 +4,7 @@
 STAGE_FQN = "CHANINN_DEMO_DATA.APPS.VIDEO_AUTOMATION_STAGE"
 
 # Model used for AI_COMPLETE description/chapter generation.
-COMPLETE_MODEL = "claude-4-sonnet"
+COMPLETE_MODEL = "claude-sonnet-5"
 
 # Max output tokens for AI_COMPLETE calls (generous to avoid truncation).
 COMPLETE_MAX_TOKENS = 8192
