@@ -4,14 +4,14 @@ entities:
     type: streamlit
     identifier:
       name: VIDPREP
-      database: CHANINN_DEMO_DATA
+      database: VIDPREP_DB
       schema: APPS
-    query_warehouse: CHANIN_XS
+    query_warehouse: VIDPREP_WH
     runtime_name: SYSTEM$ST_CONTAINER_RUNTIME_PY3_11
-    compute_pool: SYSTEM_COMPUTE_POOL_CPU
+    compute_pool: VIDPREP_COMPUTE_POOL
     external_access_integrations:
       - PYPI_ACCESS
-      - VIDEO_AI_EAI
+      - VIDPREP_EAI
     main_file: app.py
     artifacts:
       - app.py

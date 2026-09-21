@@ -1,7 +1,7 @@
 """Central configuration constants for the video-automation app."""
 
 # Fully-qualified internal stage used to stage audio/video files for AI_TRANSCRIBE.
-STAGE_FQN = "CHANINN_DEMO_DATA.APPS.VIDEO_AUTOMATION_STAGE"
+STAGE_FQN = "VIDPREP_DB.APPS.VIDPREP_STAGE"
 
 # Model used for AI_COMPLETE description/chapter generation.
 COMPLETE_MODEL = "claude-sonnet-5"
