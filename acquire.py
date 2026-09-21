@@ -62,9 +62,9 @@ class AcquisitionError(Exception):
 def _base_ydl_opts() -> dict:
     """Common yt-dlp options. Uses a real logged-in session's cookies (if
     present) to get past YouTube's bot-detection on datacenter/cloud IPs
-    (e.g. Snowflake SPCS) — this requires a JS runtime (deno, installed as a
+    (e.g. Snowflake SPCS); this requires a JS runtime (deno, installed as a
     dependency) to solve YouTube's signature challenges for the default web
-    client. Note: don't override player_client here — clients like
+    client. Note: don't override player_client here: clients like
     'android'/'tv_embedded' explicitly refuse to use cookies, which would
     silently break authenticated access."""
     opts: dict = {}

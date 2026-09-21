@@ -1,4 +1,4 @@
-"""Snowflake connection helper — uses Streamlit's managed connection, which
+"""Snowflake connection helper. Uses Streamlit's managed connection, which
 reads `.streamlit/secrets.toml` locally and embedded identity when hosted in
 Snowflake (Streamlit in Snowflake). Same code path both places."""
 
