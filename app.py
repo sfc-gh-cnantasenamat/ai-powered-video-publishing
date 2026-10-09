@@ -1,12 +1,13 @@
 """Streamlit app: video/YouTube -> description + accurate timestamped chapters."""
 
 import itertools
+import html
 import traceback
 
 import streamlit as st
 
 import enhance
-from acquire import AcquisitionError, acquire_from_upload, acquire_from_youtube
+from acquire import AcquisitionError, acquire_from_upload, acquire_from_youtube, acquire_from_youtube_upload
 from generate import GenerationError, format_timestamp, generate
 from transcribe import TranscriptionError, get_transcript
 
@@ -36,6 +37,12 @@ with st.container(border=True):
         )
     else:
         youtube_url = st.text_input("YouTube URL", placeholder="https://www.youtube.com/watch?v=...")
+        uploaded_file = st.file_uploader(
+            "Original video/audio file (optional)",
+            type=["mp4", "mov", "mkv", "webm", "ogv", "m4a", "mp3", "wav", "flac", "aac", "ogg"],
+            key="youtube_original_file",
+        )
+        st.caption("YouTube downloads are best-effort. Attach your original file to process it without contacting YouTube and keep chapter links.")
 
     prefer_captions = st.toggle(
         "Prefer existing YouTube captions over AI_TRANSCRIBE when available",
@@ -53,6 +60,8 @@ with st.container(border=True):
     generate_clicked = st.button("Generate", type="primary")
 
 if generate_clicked:
+    for result_key in ("media", "result", "transcript", "seek_seconds", "extras", "output_tab"):
+        st.session_state.pop(result_key, None)
     if input_mode == "Upload video file" and uploaded_file is None:
         st.warning("Please upload a file first.")
     elif input_mode == "YouTube link" and not youtube_url:
@@ -63,6 +72,8 @@ if generate_clicked:
             progress.progress(0, text="Acquiring media...")
             if input_mode == "Upload video file":
                 media = acquire_from_upload(uploaded_file)
+            elif uploaded_file is not None:
+                media = acquire_from_youtube_upload(youtube_url, uploaded_file)
             else:
                 media = acquire_from_youtube(youtube_url, prefer_captions=use_captions_if_available)
             progress.progress(25, text=f"Acquired: {media.title or 'media'}")
@@ -111,8 +122,11 @@ if "result" in st.session_state:
     st.header("Output")
 
     with st.container(border=True):
+        # A keyed, stateful tab set keeps the selected tab when an extras button reruns the app.
         tab_overview, tab_titles_seo, tab_thumbs, tab_captions = st.tabs(
-            ["Overview", "Titles & SEO", "Thumbnails & Clips", "Captions & FAQ"]
+            ["Overview", "Titles & SEO", "Thumbnails & Clips", "Captions & FAQ"],
+            key="output_tab",
+            on_change="rerun",
         )
 
         with tab_overview:
@@ -141,7 +155,7 @@ if "result" in st.session_state:
                                     ts = format_timestamp(gen.start_seconds)
                                     url = f"{youtube_base_url}?t={int(gen.start_seconds)}"
                                     st.markdown(
-                                        f'<a href="{url}" target="_blank">{ts}</a> &nbsp;**{gen.title}**',
+                                        f'<a href="{url}" target="_blank" rel="noopener noreferrer">{ts}</a> &nbsp;**{html.escape(gen.title)}**',
                                         unsafe_allow_html=True,
                                     )
                             with row_cols[1]:
@@ -152,7 +166,7 @@ if "result" in st.session_state:
                             ts = format_timestamp(c.start_seconds)
                             url = f"{youtube_base_url}?t={int(c.start_seconds)}"
                             st.markdown(
-                                f'<a href="{url}" target="_blank">{ts}</a> &nbsp;**{c.title}**',
+                                f'<a href="{url}" target="_blank" rel="noopener noreferrer">{ts}</a> &nbsp;**{html.escape(c.title)}**',
                                 unsafe_allow_html=True,
                             )
                 else:

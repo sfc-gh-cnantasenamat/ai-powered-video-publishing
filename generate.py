@@ -10,6 +10,8 @@ transcribed moment, never a model guess.
 from __future__ import annotations
 
 import json
+import hashlib
+import time
 from dataclasses import dataclass, field
 
 import cache
@@ -79,17 +81,34 @@ def format_timestamp(seconds: float) -> str:
     return f"{m}:{s:02d}"
 
 
+# AI_COMPLETE occasionally returns NULL for a valid request; a fresh call usually succeeds.
+AI_COMPLETE_ATTEMPTS = 3
+AI_COMPLETE_RETRY_DELAY_SECONDS = 1.0
+
+
+def content_hash(*parts) -> str:
+    """Short stable hash of JSON-serializable inputs, used to key caches by content."""
+    payload = json.dumps(parts, sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
 def _ai_complete_json(prompt: str, schema: dict) -> dict:
     sql = "SELECT AI_COMPLETE(?, ?, PARSE_JSON(?), PARSE_JSON(?))"
     model_params = json.dumps({"temperature": 0.2, "max_tokens": COMPLETE_MAX_TOKENS})
     response_format = json.dumps({"type": "json", "schema": schema})
-    rows = run_query(sql, params=(COMPLETE_MODEL, prompt, model_params, response_format))
-    if not rows or rows[0][0] is None:
-        raise GenerationError("AI_COMPLETE returned no result.")
-    raw = rows[0][0]
-    parsed = json.loads(raw) if isinstance(raw, str) else raw
-    # AI_COMPLETE with response_format returns the structured object directly.
-    return parsed
+    params = (COMPLETE_MODEL, prompt, model_params, response_format)
+    for attempt in range(1, AI_COMPLETE_ATTEMPTS + 1):
+        rows = run_query(sql, params=params)
+        if rows and rows[0][0] is not None:
+            raw = rows[0][0]
+            # AI_COMPLETE with response_format returns the structured object directly.
+            return json.loads(raw) if isinstance(raw, str) else raw
+        if attempt < AI_COMPLETE_ATTEMPTS:
+            time.sleep(AI_COMPLETE_RETRY_DELAY_SECONDS * attempt)
+    raise GenerationError(
+        f"AI_COMPLETE returned no result after {AI_COMPLETE_ATTEMPTS} attempts. "
+        "This is usually transient; please try again."
+    )
 
 
 def _windows(words: list, chunk_size: int, overlap: int):
@@ -209,7 +228,8 @@ def _resolve_and_clean_chapters(
 
 
 def generate(media: AcquiredMedia, transcript: Transcript) -> GeneratedResult:
-    cache_key = f"{media.cache_key}_{COMPLETE_MODEL}"
+    transcript_hash = content_hash(transcript.to_dict())
+    cache_key = f"{media.cache_key}_{COMPLETE_MODEL}_{transcript_hash}"
     cached = cache.get("generated", cache_key)
     if cached:
         return GeneratedResult.from_dict(cached)

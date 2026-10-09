@@ -10,8 +10,10 @@ import hashlib
 import os
 import re
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from typing import Optional
+from urllib.parse import parse_qs, urlparse
 
 import yt_dlp
 import imageio_ffmpeg
@@ -60,13 +62,11 @@ class AcquisitionError(Exception):
 
 
 def _base_ydl_opts() -> dict:
-    """Common yt-dlp options. Uses a real logged-in session's cookies (if
-    present) to get past YouTube's bot-detection on datacenter/cloud IPs
-    (e.g. Snowflake SPCS); this requires a JS runtime (deno, installed as a
-    dependency) to solve YouTube's signature challenges for the default web
-    client. Note: don't override player_client here: clients like
-    'android'/'tv_embedded' explicitly refuse to use cookies, which would
-    silently break authenticated access."""
+    """Optional local cookies do not guarantee that YouTube permits access.
+
+    Hosted deployment does not include cookies. Use the original-file fallback
+    when YouTube refuses a request rather than attempting to bypass a challenge.
+    """
     opts: dict = {}
     if YOUTUBE_COOKIES_FILE and os.path.exists(YOUTUBE_COOKIES_FILE):
         opts["cookiefile"] = YOUTUBE_COOKIES_FILE
@@ -90,9 +90,9 @@ def acquire_from_upload(uploaded_file) -> AcquiredMedia:
             f"{sorted(_SUPPORTED_VIDEO_EXTS | _SUPPORTED_AUDIO_EXTS)}"
         )
 
-    dest_path = os.path.join(TMP_DIR, uploaded_file.name)
-    with open(dest_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+    with tempfile.NamedTemporaryFile(dir=TMP_DIR, suffix=f".{ext}", delete=False) as destination:
+        dest_path = destination.name
+        destination.write(uploaded_file.getbuffer())
 
     file_hash = _file_hash(dest_path)
     media_kind = "video" if ext in _SUPPORTED_VIDEO_EXTS else "audio"
@@ -107,8 +107,53 @@ def acquire_from_upload(uploaded_file) -> AcquiredMedia:
 
 
 def _extract_youtube_id(url: str) -> Optional[str]:
-    match = re.search(r"(?:v=|youtu\.be/|shorts/)([\w-]{11})", url)
-    return match.group(1) if match else None
+    try:
+        parsed = urlparse(url.strip())
+        if parsed.scheme not in {"https", "http"} or parsed.username or parsed.password:
+            return None
+        if parsed.port not in {None, 80, 443}:
+            return None
+        segments = parsed.path.strip("/").split("/")
+        if parsed.hostname in {"youtu.be", "www.youtu.be"} and len(segments) == 1:
+            candidate = segments[0]
+        elif parsed.hostname in {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com"}:
+            if parsed.path == "/watch":
+                candidate = parse_qs(parsed.query).get("v", [""])[0]
+            elif len(segments) == 2 and segments[0] in {"shorts", "embed", "live"}:
+                candidate = segments[1]
+            else:
+                return None
+        else:
+            return None
+    except ValueError:
+        return None
+    return candidate if re.fullmatch(r"[A-Za-z0-9_-]{11}", candidate) else None
+
+
+def acquire_from_youtube_upload(url: str, uploaded_file) -> AcquiredMedia:
+    """Use an original media file with a YouTube link, without network access."""
+    video_id = _extract_youtube_id(url)
+    if not video_id:
+        raise AcquisitionError("Enter a valid YouTube video URL.")
+    media = acquire_from_upload(uploaded_file)
+    media.video_id = video_id
+    media.cache_key = f"{media.cache_key}_yt_{video_id}"
+    return media
+
+
+def _youtube_failure(error: Exception, operation: str) -> str:
+    detail = str(error).lower().replace("\u2019", "'")
+    fallback = (
+        "Attach the original video/audio file under this URL and generate again. "
+        "The app will use that file and keep the YouTube chapter links without contacting YouTube."
+    )
+    if "confirm you're not a bot" in detail or "confirm you are not a bot" in detail:
+        return f"YouTube requires interactive bot verification for this server's request. {fallback}"
+    if "403" in detail or "forbidden" in detail:
+        return f"YouTube refused the {operation} request (HTTP 403). {fallback}"
+    if "429" in detail or "too many requests" in detail:
+        return f"YouTube rate-limited this server. Wait before retrying. {fallback}"
+    return f"Could not complete the YouTube {operation} request. {fallback}"
 
 
 def _pick_caption_track(info: dict) -> tuple[Optional[dict], Optional[str], Optional[str]]:
@@ -129,18 +174,17 @@ def _pick_caption_track(info: dict) -> tuple[Optional[dict], Optional[str], Opti
 
 def acquire_from_youtube(url: str, prefer_captions: bool = True) -> AcquiredMedia:
     """Fetch metadata (and captions, if usable) then download audio-only media."""
-    video_id = _extract_youtube_id(url) or "unknown"
+    video_id = _extract_youtube_id(url)
+    if not video_id:
+        raise AcquisitionError("Enter a valid YouTube video URL.")
+    url = f"https://www.youtube.com/watch?v={video_id}"
 
     metadata_opts = {**_base_ydl_opts(), "quiet": True, "no_warnings": True, "skip_download": True}
     try:
         with yt_dlp.YoutubeDL(metadata_opts) as ydl:
             info = ydl.extract_info(url, download=False)
     except yt_dlp.utils.DownloadError as e:
-        raise AcquisitionError(
-            f"Could not fetch this YouTube video's info: {e}. "
-            "The video may be private, age-restricted, geo-blocked, or removed. "
-            "Try uploading the file directly instead."
-        ) from e
+        raise AcquisitionError(_youtube_failure(e, "metadata")) from e
 
     title = info.get("title")
     existing_description = info.get("description") or None
@@ -190,10 +234,7 @@ def acquire_from_youtube(url: str, prefer_captions: bool = True) -> AcquiredMedi
             result = ydl.extract_info(url, download=True)
             local_media_path = ydl.prepare_filename(result)
     except yt_dlp.utils.DownloadError as e:
-        raise AcquisitionError(
-            f"Could not download audio for this video: {e}. "
-            "Try uploading the file directly instead."
-        ) from e
+        raise AcquisitionError(_youtube_failure(e, "audio download")) from e
 
     ext = os.path.splitext(local_media_path)[1].lstrip(".").lower()
     if ext not in _SUPPORTED_AUDIO_EXTS:

@@ -23,4 +23,3 @@ entities:
       - config.py
       - snowflake_conn.py
       - pyproject.toml
-      - youtube_cookies.txt

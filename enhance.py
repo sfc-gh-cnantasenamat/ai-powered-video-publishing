@@ -19,7 +19,7 @@ import imageio_ffmpeg
 
 import cache
 from acquire import AcquiredMedia
-from config import MIN_CHAPTERS, TMP_DIR
+from config import COMPLETE_MODEL, MIN_CHAPTERS, TMP_DIR
 from generate import (
     CHAPTER_SCAN_CHUNK_WORDS,
     CHAPTER_SCAN_OVERLAP_WORDS,
@@ -27,6 +27,7 @@ from generate import (
     _ai_complete_json,
     _build_indexed_text,
     _windows,
+    content_hash,
 )
 from transcribe import Transcript
 
@@ -88,7 +89,8 @@ _TITLE_SEO_SCHEMA = {
 
 
 def generate_titles_seo(media: AcquiredMedia, result: GeneratedResult, duration: float) -> TitleSeoResult:
-    cache_key = f"{media.cache_key}_titles_seo"
+    # Keyed by the inputs the prompt uses, so regenerated results never reuse stale suggestions.
+    cache_key = f"{media.cache_key}_titles_seo_{content_hash(COMPLETE_MODEL, result.to_dict(), media.title, duration)}"
     cached = cache.get("titles_seo", cache_key)
     if cached:
         return TitleSeoResult.from_dict(cached)
@@ -286,7 +288,7 @@ never invent or estimate an index). Return only the structured JSON.
 
 
 def generate_quotes(media: AcquiredMedia, transcript: Transcript, max_quotes: int = 6) -> list[Quote]:
-    cache_key = f"{media.cache_key}_quotes"
+    cache_key = f"{media.cache_key}_quotes_{content_hash(COMPLETE_MODEL, transcript.to_dict(), max_quotes)}"
     cached = cache.get("quotes", cache_key)
     if cached:
         return [Quote.from_dict(d) for d in cached]
@@ -413,7 +415,7 @@ _FAQ_SCHEMA = {
 
 
 def generate_faq(media: AcquiredMedia, result: GeneratedResult) -> list[FaqItem]:
-    cache_key = f"{media.cache_key}_faq"
+    cache_key = f"{media.cache_key}_faq_{content_hash(COMPLETE_MODEL, result.to_dict())}"
     cached = cache.get("faq", cache_key)
     if cached:
         return [FaqItem.from_dict(d) for d in cached]
