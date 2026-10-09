@@ -130,7 +130,7 @@ if "result" in st.session_state:
         with tab_titles_seo:
             if st.button("Generate title & SEO suggestions", key="gen_titles_seo"):
                 try:
-                    with st.spinner("Generating title, category, and end-screen suggestions..."):
+                    with st.spinner("Generating title and SEO suggestions..."):
                         extras["titles_seo"] = enhance.generate_titles_seo(media, result, transcript.duration)
                 except GenerationError as e:
                     st.error(f"Generation failed: {e}")
@@ -140,21 +140,12 @@ if "result" in st.session_state:
                 st.subheader("Title suggestions")
                 st.code("\n".join(titles_seo.titles), language=None)
 
-                st.subheader("Category")
-                st.write(f"**{titles_seo.category or 'Unknown'}** — {titles_seo.category_reason}")
-
-                st.subheader("End screen")
-                st.write(
-                    f"Around **{format_timestamp(titles_seo.endscreen_seconds)}**: "
-                    f"{titles_seo.endscreen_suggestion}"
-                )
-
                 st.subheader("SEO checklist")
                 for item in enhance.seo_checklist(result, titles_seo.titles):
                     icon = ":material/check_circle:" if item["passed"] else ":material/warning:"
                     st.write(f"{icon} **{item['label']}** — {item['detail']}")
             else:
-                st.caption("Click the button above to generate title, category, and SEO suggestions.")
+                st.caption("Click the button above to generate title and SEO suggestions.")
 
         with tab_thumbs:
             st.subheader("Thumbnail candidates")

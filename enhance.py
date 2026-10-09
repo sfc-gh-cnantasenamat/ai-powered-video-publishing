@@ -1,4 +1,4 @@
-"""Publishing-prep extras: title/category/SEO suggestions, thumbnail frames,
+"""Publishing-prep extras: title/SEO suggestions, thumbnail frames,
 pull quotes, caption file export, and FAQ generation — all layered on top of
 the core transcript + chapters/description already produced by generate.py.
 
@@ -31,23 +31,7 @@ from generate import (
 )
 from transcribe import Transcript
 
-YOUTUBE_CATEGORIES = [
-    "Film & Animation",
-    "Autos & Vehicles",
-    "Music",
-    "Pets & Animals",
-    "Sports",
-    "Travel & Events",
-    "Gaming",
-    "People & Blogs",
-    "Comedy",
-    "Entertainment",
-    "News & Politics",
-    "How-to & Style",
-    "Education",
-    "Science & Technology",
-    "Nonprofits & Activism",
-]
+TITLE_MAX_CHARS = 100
 
 _CTA_PHRASES = (
     "subscribe", "like", "comment", "follow", "link", "check out",
@@ -63,10 +47,6 @@ _CTA_PHRASES = (
 @dataclass
 class TitleSeoResult:
     titles: list[str] = field(default_factory=list)
-    category: str = ""
-    category_reason: str = ""
-    endscreen_seconds: float = 0.0
-    endscreen_suggestion: str = ""
 
     def to_dict(self):
         return self.__dict__
@@ -80,24 +60,20 @@ _TITLE_SEO_SCHEMA = {
     "type": "object",
     "properties": {
         "titles": {"type": "array", "items": {"type": "string"}},
-        "category": {"type": "string"},
-        "category_reason": {"type": "string"},
-        "end_screen_suggestion": {"type": "string"},
     },
-    "required": ["titles", "category", "category_reason", "end_screen_suggestion"],
+    "required": ["titles"],
 }
 
 
 def generate_titles_seo(media: AcquiredMedia, result: GeneratedResult, duration: float) -> TitleSeoResult:
     # Keyed by the inputs the prompt uses, so regenerated results never reuse stale suggestions.
-    cache_key = f"{media.cache_key}_titles_seo_{content_hash(COMPLETE_MODEL, result.to_dict(), media.title, duration)}"
+    cache_key = f"{media.cache_key}_titles_v2_{content_hash(COMPLETE_MODEL, result.to_dict(), media.title, duration)}"
     cached = cache.get("titles_seo", cache_key)
     if cached:
         return TitleSeoResult.from_dict(cached)
 
     chapter_titles = "\n".join(f"- {c.title}" for c in result.chapters)
-    categories_list = "\n".join(f"- {c}" for c in YOUTUBE_CATEGORIES)
-    prompt = f"""You are preparing a video for publishing on YouTube. Here is the video's
+    prompt = f"""You are preparing a video for publishing. Here is the video's
 description and chapter list:
 
 Description:
@@ -106,40 +82,16 @@ Description:
 Chapters:
 {chapter_titles}
 
-Tasks:
-1. Suggest 5-8 candidate video titles. Mix descriptive/SEO-friendly titles with
-   a couple punchier options. Each title must be 100 characters or fewer
-   (YouTube's title limit). No clickbait that misrepresents the content.
-2. Pick the single best-fitting category for this video from EXACTLY this list
-   (return the text exactly as written here):
-{categories_list}
-   Also give a one-sentence reason for that pick.
-3. Suggest one short end-screen call-to-action (what to promote/link/ask the
-   viewer to do in the last ~20 seconds), based on the content.
+Suggest 5-8 candidate video titles. Mix descriptive/SEO-friendly titles with
+a couple punchier options. Each title must be {TITLE_MAX_CHARS} characters or
+fewer. No clickbait that misrepresents the content.
 
 Return only the structured JSON.
 """
     raw = _ai_complete_json(prompt, _TITLE_SEO_SCHEMA)
 
     titles = [t.strip() for t in (raw.get("titles") or []) if t and t.strip()]
-    category = (raw.get("category") or "").strip()
-    if category not in YOUTUBE_CATEGORIES:
-        # Model drifted from the allowed list — fall back to the closest
-        # case-insensitive match, else leave unset rather than show junk.
-        lowered = {c.lower(): c for c in YOUTUBE_CATEGORIES}
-        category = lowered.get(category.lower(), "")
-
-    last_chapter_start = result.chapters[-1].start_seconds if result.chapters else 0.0
-    endscreen_seconds = max(last_chapter_start, duration - 20.0)
-    endscreen_seconds = max(0.0, min(endscreen_seconds, duration))
-
-    seo_result = TitleSeoResult(
-        titles=titles,
-        category=category,
-        category_reason=(raw.get("category_reason") or "").strip(),
-        endscreen_seconds=endscreen_seconds,
-        endscreen_suggestion=(raw.get("end_screen_suggestion") or "").strip(),
-    )
+    seo_result = TitleSeoResult(titles=titles)
     cache.set("titles_seo", cache_key, seo_result.to_dict())
     return seo_result
 
@@ -152,7 +104,7 @@ def seo_checklist(result: GeneratedResult, titles: list[str]) -> list[dict]:
 
     keyword_hits = sum(1 for k in result.keywords if k.lower() in desc_lower)
     has_cta = any(phrase in desc_lower for phrase in _CTA_PHRASES)
-    has_short_title = any(len(t) <= 100 for t in titles) if titles else False
+    has_short_title = any(len(t) <= TITLE_MAX_CHARS for t in titles) if titles else False
 
     return [
         {
@@ -171,7 +123,7 @@ def seo_checklist(result: GeneratedResult, titles: list[str]) -> list[dict]:
             "detail": "found a CTA phrase (subscribe/like/comment/...)" if has_cta else "no CTA phrase found",
         },
         {
-            "label": "At least one title within YouTube's 100-char limit",
+            "label": f"At least one title of {TITLE_MAX_CHARS} characters or fewer",
             "passed": has_short_title,
             "detail": "ok" if has_short_title else "no title generated yet, or all are too long",
         },
