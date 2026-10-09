@@ -1,7 +1,12 @@
 """Central configuration constants for the video-automation app."""
 
+import os
+import re
+
 # Fully-qualified internal stage used to stage audio/video files for AI_TRANSCRIBE.
-STAGE_FQN = "VIDPREP_DB.APPS.VIDPREP_STAGE"
+STAGE_FQN = os.getenv("VIDPREP_STAGE_FQN", "VIDPREP_DB.APPS.VIDPREP_STAGE")
+if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*", STAGE_FQN):
+    raise ValueError("VIDPREP_STAGE_FQN must contain three unquoted Snowflake identifiers")
 
 # Model used for AI_COMPLETE description/chapter generation.
 COMPLETE_MODEL = "claude-sonnet-5"
@@ -21,12 +26,10 @@ MAX_CHAPTERS = 12
 MIN_CHAPTER_GAP_SECONDS = 10
 
 # Local cache directory for transcripts and generated results.
-CACHE_DIR = ".cache"
+CACHE_DIR = os.getenv("VIDPREP_CACHE_DIR", ".cache")
 
 # Local scratch directory for downloaded/uploaded media before staging.
-TMP_DIR = ".cache/tmp"
+TMP_DIR = os.path.join(CACHE_DIR, "tmp")
 
-# Optional Netscape-format cookies file (exported from a real logged-in
-# YouTube session) used to work around YouTube's bot-detection on
-# datacenter/cloud IPs (e.g. Snowflake SPCS). Only used if the file exists.
-YOUTUBE_COOKIES_FILE = "youtube_cookies.txt"
+# Optional local-only credential input; never include in deployment artifacts.
+YOUTUBE_COOKIES_FILE = os.getenv("VIDPREP_YOUTUBE_COOKIES_FILE", "")

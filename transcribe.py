@@ -14,6 +14,7 @@ Preference order:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -126,7 +127,7 @@ def _chunk_media(path: str, max_chunk_seconds: int) -> list[str]:
         check=True,
     )
     chunk_paths = sorted(
-        os.path.join(TMP_DIR, f)
+        os.path.join(os.path.dirname(path), f)
         for f in os.listdir(os.path.dirname(path) or ".")
         if f.startswith(os.path.basename(base) + "_chunk_") and f.endswith(ext)
     )
@@ -142,15 +143,16 @@ def _transcribe_chunk_with_ai_transcribe(chunk_path: str) -> dict:
         f"SELECT AI_TRANSCRIBE(TO_FILE('@{STAGE_FQN}', ?), "
         "OBJECT_CONSTRUCT('timestamp_granularity', 'word'))"
     )
-    rows = run_query(sql, params=(staged_name,))
-    if not rows or rows[0][0] is None:
-        raise TranscriptionError(f"AI_TRANSCRIBE returned no result for {chunk_path}.")
-    # Clean up the staged copy — it was only needed for this call.
     try:
-        run_query(f"REMOVE '@{STAGE_FQN}/{staged_name}'")
-    except Exception:
-        pass  # cleanup best-effort; not fatal
-    return json.loads(rows[0][0])
+        rows = run_query(sql, params=(staged_name,))
+        if not rows or rows[0][0] is None:
+            raise TranscriptionError("AI_TRANSCRIBE returned no result.")
+        return json.loads(rows[0][0])
+    finally:
+        try:
+            run_query(f"REMOVE '@{STAGE_FQN}/{staged_name}'")
+        except Exception:
+            logging.getLogger(__name__).warning("Staged media cleanup failed; check the configured stage.")
 
 
 def _transcribe_via_ai_transcribe(local_media_path: str) -> Transcript:
@@ -184,7 +186,8 @@ def _transcribe_via_ai_transcribe(local_media_path: str) -> Transcript:
 def get_transcript(media: AcquiredMedia, use_captions_if_available: bool = True) -> Transcript:
     """Return a global word-level Transcript for the given media, using the cache
     when available."""
-    cached = cache.get("transcripts", media.cache_key)
+    cache_key = f"{media.cache_key}_{'captions' if use_captions_if_available else 'ai'}"
+    cached = cache.get("transcripts", cache_key)
     if cached:
         return Transcript.from_dict(cached)
 
@@ -196,5 +199,5 @@ def get_transcript(media: AcquiredMedia, use_captions_if_available: bool = True)
     if not transcript.words:
         raise TranscriptionError("Transcription produced no words/segments.")
 
-    cache.set("transcripts", media.cache_key, transcript.to_dict())
+    cache.set("transcripts", cache_key, transcript.to_dict())
     return transcript
