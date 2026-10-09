@@ -8,7 +8,7 @@ sections = [
  ("Transcribing with AI_TRANSCRIBE", "#581c87", "Next, the app stages the media and calls the AI transcribe function with word level timestamps. Every spoken word comes back with a start and end time. Long recordings are split into chunks and stitched back onto one timeline."),
  ("Why timestamps come from code", "#9f1239", "Here is the key design idea. A language model should never invent a timestamp. Instead, the model points at a word index in the real transcript, and the code looks up the exact time for that word. That removes a whole class of hallucinated chapter markers."),
  ("Generating with AI_COMPLETE", "#1e40af", "The AI complete function reads the transcript in overlapping windows and suggests chapter titles, a short description, and search keywords. Responses use a structured JSON format, so the app can validate every field before showing it."),
- ("Titles, thumbnails, and captions", "#92400e", "Each extra feature lives in its own tab. You can generate title ideas with a category and an SEO checklist, extract real thumbnail frames at chapter starts, find quotable moments for social clips, and download caption files in SRT or VTT format."),
+ ("Titles, thumbnails, and captions", "#92400e", "Each extra feature lives in its own tab. You can generate title ideas with an SEO checklist, extract real thumbnail frames at chapter starts, find quotable moments for social clips, and download caption files in SRT or VTT format."),
  ("Review before you publish", "#134e4a", "Finally, always review the results before you publish. Transcription and generated copy can contain mistakes, so treat everything as a strong first draft. Thanks for watching, and happy publishing."),
 ]
 parts = []

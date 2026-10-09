@@ -27,6 +27,12 @@ class PackagingTests(unittest.TestCase):
             self.assertNotIn(name, deps)
         self.assertNotIn('VIDPREP_EAI', (ROOT / 'snowflake.yml').read_text())
 
+    def test_app_is_platform_neutral(self):
+        for name in ('app.py', 'enhance.py', 'generate.py', 'README.md'):
+            text = (ROOT / name).read_text().lower()
+            for term in ('youtube', 'end-screen', 'end screen', 'category'):
+                self.assertNotIn(term, text, f'{term!r} in {name}')
+
     def test_stage_identifier_validation(self):
         with patch.dict(os.environ, {'VIDPREP_STAGE_FQN': "db.schema.stage';DROP DATABASE x;--"}):
             spec = importlib.util.spec_from_file_location('config_test', ROOT / 'config.py')

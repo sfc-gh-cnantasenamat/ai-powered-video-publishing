@@ -260,7 +260,7 @@ Write in second person ("you'll..."), engaging but factual, no hashtags, no
 emoji, no clickbait.
 
 Also suggest 10-15 SEO keywords/tags for this video, suitable for pasting into
-YouTube's video tags field and for improving search discoverability. Prefer
+a video platform's tags field and for improving search discoverability. Prefer
 specific, high-intent multi-word phrases (e.g. "snowflake cortex ai tutorial")
 over single generic words (e.g. "tutorial"), based on the topics actually
 covered in the content summary above. Return only the structured JSON.
