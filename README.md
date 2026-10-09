@@ -1,6 +1,10 @@
 # VidPrep
 
-Upload your own video or audio to generate chapters, descriptions, titles, keywords, thumbnails, captions, quotes, and an FAQ with Snowflake Cortex.
+Upload your own video or audio file to generate chapters, descriptions, titles, keywords, thumbnails, captions, quotes, and an FAQ with Snowflake Cortex.
+
+## Sample video
+
+No video handy? Upload `sample/vidprep_demo.mp4`, a two-minute synthetic narrated demo with no real people or data. See `sample/README.md` for how it was made.
 
 ## Run locally
 
@@ -13,12 +17,6 @@ SNOWFLAKE_DEFAULT_CONNECTION_NAME=devrel python -m streamlit run app.py
 The connection must be authorized to use the stage configured in `config.py` and the required Cortex functions. For another local profile, replace `devrel` with its name. Hosted Streamlit uses its embedded identity.
 
 Optional environment overrides: `VIDPREP_STAGE_FQN` (three unquoted identifiers), `VIDPREP_CACHE_DIR` (isolated local cache/scratch directory). Defaults remain `VIDPREP_DB.APPS.VIDPREP_STAGE` and `.cache`.
-
-## YouTube input
-
-URL-only downloading is best-effort and can fail with bot verification, HTTP 403, or rate limits. Attach the original file under the YouTube URL to process that file without contacting YouTube, retaining chapter links. Use media you own or are authorized to process.
-
-Cookies are not required, auto-discovered, or included in deployment artifacts. `VIDPREP_YOUTUBE_COOKIES_FILE` is an explicit optional local-only credential path; do not commit or deploy that file, and do not treat cookies as a guarantee of access.
 
 ## Deploy and clean up
 

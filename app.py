@@ -1,13 +1,11 @@
-"""Streamlit app: video/YouTube -> description + accurate timestamped chapters."""
+"""Streamlit app: uploaded video -> description + accurate timestamped chapters."""
 
-import itertools
-import html
 import traceback
 
 import streamlit as st
 
 import enhance
-from acquire import AcquisitionError, acquire_from_upload, acquire_from_youtube, acquire_from_youtube_upload
+from acquire import AcquisitionError, acquire_from_upload
 from generate import GenerationError, format_timestamp, generate
 from transcribe import TranscriptionError, get_transcript
 
@@ -19,71 +17,36 @@ st.set_page_config(
 
 st.title(":material/schedule: VidPrep")
 st.caption(
-    "Upload a video file or paste a YouTube link. Timestamps are resolved from "
+    "Upload a video or audio file. Timestamps are resolved from "
     "real transcribed word timings — never guessed by the model."
 )
 
 st.header("Input")
 
 with st.container(border=True):
-    input_mode = st.radio("Input", ["Upload video file", "YouTube link"], horizontal=True)
-
-    uploaded_file = None
-    youtube_url = None
-
-    if input_mode == "Upload video file":
-        uploaded_file = st.file_uploader(
-            "Video or audio file", type=["mp4", "mov", "mkv", "webm", "ogv", "m4a", "mp3", "wav", "flac", "aac", "ogg"]
-        )
-    else:
-        youtube_url = st.text_input("YouTube URL", placeholder="https://www.youtube.com/watch?v=...")
-        uploaded_file = st.file_uploader(
-            "Original video/audio file (optional)",
-            type=["mp4", "mov", "mkv", "webm", "ogv", "m4a", "mp3", "wav", "flac", "aac", "ogg"],
-            key="youtube_original_file",
-        )
-        st.caption("YouTube downloads are best-effort. Attach your original file to process it without contacting YouTube and keep chapter links.")
-
-    prefer_captions = st.toggle(
-        "Prefer existing YouTube captions over AI_TRANSCRIBE when available",
-        value=True,
-        help="Faster and free, but coarser (cue-level) timing than AI_TRANSCRIBE's word-level output.",
+    uploaded_file = st.file_uploader(
+        "Video or audio file", type=["mp4", "mov", "mkv", "webm", "ogv", "m4a", "mp3", "wav", "flac", "aac", "ogg"]
     )
-    ignore_existing_timestamps = st.toggle(
-        "Ignore existing timestamps (always transcribe with AI_TRANSCRIBE)",
-        value=False,
-        help="Skip YouTube captions entirely and always re-transcribe with Snowflake AI_TRANSCRIBE's "
-        "word-level timestamps, even when captions exist. Overrides the toggle above.",
-    )
-    use_captions_if_available = prefer_captions and not ignore_existing_timestamps
 
     generate_clicked = st.button("Generate", type="primary")
 
 if generate_clicked:
     for result_key in ("media", "result", "transcript", "seek_seconds", "extras", "output_tab"):
         st.session_state.pop(result_key, None)
-    if input_mode == "Upload video file" and uploaded_file is None:
+    if uploaded_file is None:
         st.warning("Please upload a file first.")
-    elif input_mode == "YouTube link" and not youtube_url:
-        st.warning("Please paste a YouTube URL first.")
     else:
         progress = st.empty()
         try:
             progress.progress(0, text="Acquiring media...")
-            if input_mode == "Upload video file":
-                media = acquire_from_upload(uploaded_file)
-            elif uploaded_file is not None:
-                media = acquire_from_youtube_upload(youtube_url, uploaded_file)
-            else:
-                media = acquire_from_youtube(youtube_url, prefer_captions=use_captions_if_available)
+            media = acquire_from_upload(uploaded_file)
             progress.progress(25, text=f"Acquired: {media.title or 'media'}")
 
             progress.progress(40, text="Transcribing (this is the long step)...")
-            transcript = get_transcript(media, use_captions_if_available=use_captions_if_available)
+            transcript = get_transcript(media)
             progress.progress(
                 80,
-                text=f"Transcribed ({transcript.granularity}-level, {transcript.source}, "
-                f"{len(transcript.words)} segments, {transcript.duration:.0f}s)",
+                text=f"Transcribed ({len(transcript.words)} words, {transcript.duration:.0f}s)",
             )
 
             progress.progress(90, text="Generating description and chapters...")
@@ -137,62 +100,21 @@ if "result" in st.session_state:
             # player (in the right column) reads it in this same script run.
             with left:
                 st.subheader("Chapters")
+                st.caption("Click a timestamp to jump the preview player to that moment.")
 
-                youtube_base_url = f"https://youtu.be/{media.video_id}" if media.video_id else None
-
-                if youtube_base_url:
-                    st.caption("Click a timestamp to open that moment on YouTube in a new tab.")
-
-                    if media.existing_chapters:
-                        hdr_cols = st.columns(2)
-                        hdr_cols[0].markdown("**Generated chapters**")
-                        hdr_cols[1].markdown("**Original YouTube chapters**")
-
-                        for gen, orig in itertools.zip_longest(result.chapters, media.existing_chapters):
-                            row_cols = st.columns(2)
-                            with row_cols[0]:
-                                if gen:
-                                    ts = format_timestamp(gen.start_seconds)
-                                    url = f"{youtube_base_url}?t={int(gen.start_seconds)}"
-                                    st.markdown(
-                                        f'<a href="{url}" target="_blank" rel="noopener noreferrer">{ts}</a> &nbsp;**{html.escape(gen.title)}**',
-                                        unsafe_allow_html=True,
-                                    )
-                            with row_cols[1]:
-                                if orig:
-                                    st.write(f"{format_timestamp(orig.start_seconds)} {orig.title}")
-                    else:
-                        for c in result.chapters:
-                            ts = format_timestamp(c.start_seconds)
-                            url = f"{youtube_base_url}?t={int(c.start_seconds)}"
-                            st.markdown(
-                                f'<a href="{url}" target="_blank" rel="noopener noreferrer">{ts}</a> &nbsp;**{html.escape(c.title)}**',
-                                unsafe_allow_html=True,
-                            )
-                else:
-                    st.caption("Click a timestamp to jump the preview player to that moment.")
-
-                    for i, c in enumerate(result.chapters):
-                        ts = format_timestamp(c.start_seconds)
-                        row_cols = st.columns([1, 4])
-                        with row_cols[0]:
-                            if st.button(ts, key=f"seek_btn_{i}"):
-                                st.session_state["seek_seconds"] = c.start_seconds
-                        with row_cols[1]:
-                            st.markdown(f"**{c.title}**")
+                for i, c in enumerate(result.chapters):
+                    ts = format_timestamp(c.start_seconds)
+                    row_cols = st.columns([1, 4])
+                    with row_cols[0]:
+                        if st.button(ts, key=f"seek_btn_{i}"):
+                            st.session_state["seek_seconds"] = c.start_seconds
+                    with row_cols[1]:
+                        st.markdown(f"**{c.title}**")
 
             with right:
                 st.subheader("Preview")
                 seek_seconds = int(st.session_state["seek_seconds"])
-                if media.source_type == "youtube":
-                    if media.local_preview_path:
-                        st.video(media.local_preview_path, start_time=seek_seconds)
-                    else:
-                        st.caption(
-                            "A video preview couldn't be downloaded for this video. Audio only:"
-                        )
-                        st.audio(media.local_media_path)
-                elif media.media_kind == "video":
+                if media.media_kind == "video":
                     st.video(media.local_media_path, start_time=seek_seconds)
                 else:
                     st.audio(media.local_media_path, start_time=seek_seconds)
@@ -273,7 +195,7 @@ if "result" in st.session_state:
             st.subheader("Caption file export")
             srt_text = enhance.build_srt(transcript)
             vtt_text = enhance.build_vtt(transcript)
-            base_name = (media.title or media.video_id or "captions").replace(" ", "_")
+            base_name = (media.title or "captions").replace(" ", "_")
             dl_cols = st.columns(2)
             with dl_cols[0]:
                 st.download_button("Download .srt", srt_text, file_name=f"{base_name}.srt", mime="text/plain")

@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, field
 
 import cache
-from acquire import AcquiredMedia, ExistingChapter
+from acquire import AcquiredMedia
 from config import (
     COMPLETE_MAX_TOKENS,
     COMPLETE_MODEL,
@@ -251,17 +251,10 @@ def generate(media: AcquiredMedia, transcript: Transcript) -> GeneratedResult:
     chapters = _resolve_and_clean_chapters(words, all_candidates)
 
     combined_summary = " ".join(chunk_summaries)
-    existing_desc_block = (
-        f"\n\nExisting YouTube description (refine and improve this, don't discard it "
-        f"or write something unrelated):\n{media.existing_description}"
-        if media.existing_description
-        else ""
-    )
     desc_prompt = f"""Write a compelling 2-4 sentence video description for a tutorial/video
 based on this content summary:
 
 {combined_summary}
-{existing_desc_block}
 
 Write in second person ("you'll..."), engaging but factual, no hashtags, no
 emoji, no clickbait.

@@ -21,9 +21,11 @@ class PackagingTests(unittest.TestCase):
         for artifact in artifacts:
             self.assertTrue((ROOT / artifact).is_file())
 
-    def test_no_cookies_by_default(self):
-        with patch.object(acquire, 'YOUTUBE_COOKIES_FILE', ''):
-            self.assertEqual(acquire._base_ydl_opts(), {})
+    def test_no_youtube_dependencies(self):
+        deps = (ROOT / 'pyproject.toml').read_text()
+        for name in ('yt-dlp', 'deno', 'webvtt'):
+            self.assertNotIn(name, deps)
+        self.assertNotIn('VIDPREP_EAI', (ROOT / 'snowflake.yml').read_text())
 
     def test_stage_identifier_validation(self):
         with patch.dict(os.environ, {'VIDPREP_STAGE_FQN': "db.schema.stage';DROP DATABASE x;--"}):
@@ -43,11 +45,11 @@ class PackagingTests(unittest.TestCase):
                 transcribe._transcribe_chunk_with_ai_transcribe('fixture.wav')
             self.assertEqual(query.call_count, 2)
 
-    def test_caption_cache_does_not_override_forced_transcription(self):
+    def test_transcript_cache_key(self):
         media = acquire.AcquiredMedia('upload', 'fixture.wav', 'audio', 'new')
         transcript = Transcript([Word(0, 1, 'hello')], 1)
         with patch.object(transcribe.cache, 'get', return_value=None) as get, patch.object(transcribe.cache, 'set'), patch.object(transcribe, '_transcribe_via_ai_transcribe', return_value=transcript):
-            transcribe.get_transcript(media, False)
+            transcribe.get_transcript(media)
             get.assert_called_once_with('transcripts', 'new_ai')
 
     def test_python_sources_parse(self):

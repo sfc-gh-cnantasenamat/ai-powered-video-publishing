@@ -11,7 +11,6 @@ entities:
     compute_pool: VIDPREP_COMPUTE_POOL
     external_access_integrations:
       - PYPI_ACCESS
-      - VIDPREP_EAI
     main_file: app.py
     artifacts:
       - app.py
