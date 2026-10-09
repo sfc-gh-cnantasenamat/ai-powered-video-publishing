@@ -194,7 +194,7 @@ if "result" in st.session_state:
                 st.download_button("Download .vtt", vtt_text, file_name=f"{base_name}.vtt", mime="text/vtt")
 
             st.divider()
-            st.subheader("FAQ / Timestamps for X")
+            st.subheader("FAQ / Timestamps")
             if st.button("Generate FAQ", key="gen_faq"):
                 try:
                     with st.spinner("Generating FAQ from chapters..."):
@@ -210,7 +210,7 @@ if "result" in st.session_state:
                     st.write(item.answer)
                     st.caption(f"See {format_timestamp(item.start_seconds)} — {item.chapter_title}")
                     lines.append(f"{format_timestamp(item.start_seconds)} {item.question}")
-                st.subheader("Copy-paste \"Timestamps for X\" block")
+                st.subheader("Copy-paste \"Timestamps\" block")
                 st.code("\n".join(lines), language=None)
             elif faq == []:
                 st.caption("No FAQ items generated.")
