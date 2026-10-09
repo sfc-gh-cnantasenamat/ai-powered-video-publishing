@@ -5,6 +5,3 @@ __pycache__/
 output/
 .snowflake/
 .streamlit/secrets.toml
-
-# Optional local session cookies: never commit or deploy.
-youtube_cookies.txt

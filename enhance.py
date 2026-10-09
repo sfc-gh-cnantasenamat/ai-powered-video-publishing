@@ -196,8 +196,6 @@ class ThumbnailCandidate:
 
 
 def _preview_video_path(media: AcquiredMedia) -> str | None:
-    if media.source_type == "youtube":
-        return media.local_preview_path
     if media.media_kind == "video":
         return media.local_media_path
     return None

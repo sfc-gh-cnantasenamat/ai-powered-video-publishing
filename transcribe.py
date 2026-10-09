@@ -1,14 +1,11 @@
 """Transcription: turns acquired media into a single, global word-level
 timeline of {start, end, text} — the ground truth for all chapter timestamps.
 
-Preference order:
-1. YouTube captions (cue-level, already tied to real timestamps) — free, instant.
-2. Snowflake AI_TRANSCRIBE with word-level granularity — used for uploaded
-   files and YouTube videos with no usable captions. Handles >55 min media by
-   chunking with ffmpeg and re-basing each chunk's word timestamps onto a
-   single global timeline using the chunk's *actual measured* duration (not
-   an assumed split point), so offsets stay exact even if ffmpeg's split
-   point lands a little off from the requested segment_time.
+Uses Snowflake AI_TRANSCRIBE with word-level granularity. Handles >55 min
+media by chunking with ffmpeg and re-basing each chunk's word timestamps onto
+a single global timeline using the chunk's *actual measured* duration (not an
+assumed split point), so offsets stay exact even if ffmpeg's split point
+lands a little off from the requested segment_time.
 """
 
 from __future__ import annotations
@@ -21,7 +18,6 @@ import subprocess
 from dataclasses import dataclass, field
 
 import imageio_ffmpeg
-import webvtt
 
 import cache
 from acquire import AcquiredMedia
@@ -44,8 +40,8 @@ class Word:
 class Transcript:
     words: list[Word] = field(default_factory=list)
     duration: float = 0.0
-    granularity: str = "word"  # "word" | "cue"
-    source: str = "ai_transcribe"  # "ai_transcribe" | "youtube_captions"
+    granularity: str = "word"
+    source: str = "ai_transcribe"
 
     def to_dict(self):
         return {
@@ -82,19 +78,6 @@ def _probe_duration(path: str) -> float:
         raise TranscriptionError(f"Could not determine duration of {path}.")
     hours, minutes, seconds = match.groups()
     return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
-
-
-def _parse_vtt_to_words(vtt_path: str) -> Transcript:
-    """Cue-level captions parsed as pseudo-words (one 'word' per caption cue)."""
-    words: list[Word] = []
-    last_end = 0.0
-    for caption in webvtt.read(vtt_path):
-        text = caption.text.replace("\n", " ").strip()
-        if not text:
-            continue
-        words.append(Word(start=caption.start_in_seconds, end=caption.end_in_seconds, text=text))
-        last_end = max(last_end, caption.end_in_seconds)
-    return Transcript(words=words, duration=last_end, granularity="cue", source="youtube_captions")
 
 
 def _chunk_media(path: str, max_chunk_seconds: int) -> list[str]:
@@ -183,18 +166,15 @@ def _transcribe_via_ai_transcribe(local_media_path: str) -> Transcript:
     )
 
 
-def get_transcript(media: AcquiredMedia, use_captions_if_available: bool = True) -> Transcript:
+def get_transcript(media: AcquiredMedia) -> Transcript:
     """Return a global word-level Transcript for the given media, using the cache
     when available."""
-    cache_key = f"{media.cache_key}_{'captions' if use_captions_if_available else 'ai'}"
+    cache_key = f"{media.cache_key}_ai"
     cached = cache.get("transcripts", cache_key)
     if cached:
         return Transcript.from_dict(cached)
 
-    if use_captions_if_available and media.captions_vtt_path and os.path.exists(media.captions_vtt_path):
-        transcript = _parse_vtt_to_words(media.captions_vtt_path)
-    else:
-        transcript = _transcribe_via_ai_transcribe(media.local_media_path)
+    transcript = _transcribe_via_ai_transcribe(media.local_media_path)
 
     if not transcript.words:
         raise TranscriptionError("Transcription produced no words/segments.")

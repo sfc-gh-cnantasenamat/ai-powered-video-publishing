@@ -28,8 +28,5 @@ MIN_CHAPTER_GAP_SECONDS = 10
 # Local cache directory for transcripts and generated results.
 CACHE_DIR = os.getenv("VIDPREP_CACHE_DIR", ".cache")
 
-# Local scratch directory for downloaded/uploaded media before staging.
+# Local scratch directory for uploaded media before staging.
 TMP_DIR = os.path.join(CACHE_DIR, "tmp")
-
-# Optional local-only credential input; never include in deployment artifacts.
-YOUTUBE_COOKIES_FILE = os.getenv("VIDPREP_YOUTUBE_COOKIES_FILE", "")
